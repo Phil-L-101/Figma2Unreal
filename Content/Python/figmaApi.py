@@ -27,6 +27,15 @@ def sanitiseName(Name):
                      splitlines(False)[0][:50])
         return SanitisedName
 
+# Gets full path to bluerint class
+def getAssetPath(Directory, AssetName):
+    Path = Directory + AssetName + "." + AssetName + "_C"
+    return Path
+
+# Create unique instance name to avoid conflicts
+def createInsatanceName(Name, id):
+    return Name + "_" + id
+
 # Convert Fills into a single colour
 def getColorFromFills(Fills, DefaultColor):
         try: # May not have a background colour
@@ -88,6 +97,10 @@ def createChildren(ChildrenDict, Document, Parent):
                     ChildNode = FigmaComponent(Document,child, Parent)
                     ChildNode.writeToUnreal()
                     Children.append(ChildNode )
+                elif child["type"] == "INSTANCE":
+                    ChildNode = FigmaInstance(Document,child, Parent)
+                    ChildNode.writeToUnreal()
+                    Children.append(ChildNode )
                 elif child["type"] == "VECTOR":
                     ChildNode = FigmaVector(Document,child, Parent)
                     ChildNode.writeToUnreal()
@@ -131,6 +144,7 @@ class FigmaDocument():
         self.FileID = FileID
         self.BaseDirectory = BaseDirectory
         self.AccessToken = AccessToken
+        self.Components = {}
         self.readFile()
 
     # Read in file from API    
@@ -169,6 +183,13 @@ class FigmaDocument():
         self.Children = createChildren(self.ChildrenDict, self, self) # Recursively creates child assets
         saveAsset(self.FrameAsset)
 
+    # Add a component to the document that can be instanced
+    def addComponent(self,Component):
+        self.Components[Component.id] = Component
+
+
+
+
 # Standard Figma frame holds children
 class FigmaFrame():
     def __init__(self, Document, FrameDict, Parent):
@@ -205,21 +226,75 @@ class FigmaFrame():
         
         createDirSafe(self.Directory)
         
-        AssetName = "WBP_" + self.Name
+        self.AssetName = "WBP_" + self.Name
         
-        self.FrameAsset = createFigmaFrameAsset(self.Directory+"/"+AssetName)
+        self.FrameAsset = createFigmaFrameAsset(self.Directory+"/"+ self.AssetName)
 
         unreal.FigmaImporterBPLibrary.clear_content(self.FrameAsset)
         unreal.FigmaImporterBPLibrary.set_background(self.FrameAsset, [self.Width,self.Height], [self.BackgroundColor["r"],self.BackgroundColor["g"],self.BackgroundColor["b"],self.BackgroundColor["a"]])
         self.Children = createChildren(self.ChildrenDict, self.Document, self)
         saveAsset(self.FrameAsset)
-        unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,self.Directory + AssetName + "." + AssetName + "_C" , self.Name, [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
+        unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,getAssetPath(self.Directory, self.AssetName) , createInsatanceName(self.Name, self.id), [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
         saveAsset(self.Parent.FrameAsset)
 
-# Special frame class that can be instanced (not implemented yet)
+# Special frame class that can be instanced
 class FigmaComponent(FigmaFrame):
-    pass
+    # Produce assets from frame in Unreal and add to parent frame
+    def writeToUnreal(self):
+        
+        createDirSafe(self.Directory)
+        
+        self.AssetName = "WBP_" + self.Name
+        
+        self.FrameAsset = createFigmaFrameAsset(self.Directory+"/"+ self.AssetName)
 
+        unreal.FigmaImporterBPLibrary.clear_content(self.FrameAsset)
+        unreal.FigmaImporterBPLibrary.set_background(self.FrameAsset, [self.Width,self.Height], [self.BackgroundColor["r"],self.BackgroundColor["g"],self.BackgroundColor["b"],self.BackgroundColor["a"]])
+        self.Children = createChildren(self.ChildrenDict, self.Document, self)
+        saveAsset(self.FrameAsset)
+        unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,getAssetPath(self.Directory, self.AssetName) , createInsatanceName(self.Name, self.id), [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
+        saveAsset(self.Parent.FrameAsset)
+        self.Document.addComponent(self)
+
+# An instance that references an existing component
+class FigmaInstance():
+    def __init__(self, Document, FrameDict, Parent):
+        self.Document = Document
+        self.Parent = Parent
+        self.Name = sanitiseName(FrameDict["name"])
+        self.Directory = self.Parent.Directory +  self.Name + "/"
+        self.Height = FrameDict["absoluteBoundingBox"]["height"]
+        self.Width = FrameDict["absoluteBoundingBox"]["width"]
+        self.xPosition = FrameDict["absoluteBoundingBox"]["x"]
+        self.yPosition = FrameDict["absoluteBoundingBox"]["y"]
+        self.id = FrameDict["id"]
+        self.ComponentID = FrameDict["componentId"]
+        if type(self.Parent) == FigmaDocument: # Check if parent is the document canvas and set anchors accordingly
+            self.MinAnchors = [0.5,0.5]
+            self.MaxAnchors = [0.5,0.5]
+            self.Alignment = [0,0]
+        else:
+            self.MinAnchors = [0,0]
+            self.MaxAnchors = [0,0]
+            self.Alignment = [0,0] 
+
+        self.ChildrenDict = FrameDict["children"]
+        
+        self.BackgroundColor = getColorFromFills(FrameDict["fills"],{
+                                    "r" : 0,
+                                    "g" : 0,
+                                    "b" : 0,
+                                    "a" : 0
+                                    })
+            
+        
+    # Produce assets from frame in Unreal and add to parent frame
+    def writeToUnreal(self):
+        InstanceSource = self.Document.Components[self.ComponentID]
+        InstanceSourceDirectory = InstanceSource.Directory
+        InstanceSourceAssetName = InstanceSource.AssetName
+        unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,getAssetPath(InstanceSourceDirectory, InstanceSourceAssetName) , createInsatanceName(self.Name, self.id), [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
+        saveAsset(self.Parent.FrameAsset)
 
 # A vector is the base class for all shapes and images in Figma
 class FigmaVector():
@@ -268,7 +343,7 @@ class FigmaVector():
         AssetTools.import_asset_tasks([AssetImportTask])
         ImageTexture2D = unreal.EditorAssetLibrary.load_asset(self.ImagePath)
         self.Widget = unreal.FigmaImporterBPLibrary.add_image_widget(self.Parent.FrameAsset,
-                                                                     self.Name,
+                                                                     createInsatanceName(self.Name, self.id),
                                                                      [ImageTexture2D.blueprint_get_size_x(),ImageTexture2D.blueprint_get_size_y()], # Use the image size rather than stated size to enable LINE to work which reports 0 width
                                                                      createRelativePosition([self.Parent.xPosition, self.Parent.yPosition],
                                                                      [self.xPosition, self.yPosition]),
@@ -307,6 +382,6 @@ class FigmaText():
         Font.set_editor_property('size', self.FontSize)
         Font.set_editor_property('FontObject',unreal.EditorAssetLibrary.load_asset("/FigmaImporter/Inter-VariableFont_slnt_wght_Font")) # Uses default Inter font from plugin
         Font.set_editor_property('TypefaceFontName', "Inter-VariableFont_slnt_wght")
-        self.Widget = unreal.FigmaImporterBPLibrary.add_text_widget(self.Parent.FrameAsset, self.Name, self.Content, Font, [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
+        self.Widget = unreal.FigmaImporterBPLibrary.add_text_widget(self.Parent.FrameAsset, createInsatanceName(self.Name, self.id), self.Content, Font, [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
         self.Widget.set_editor_property('color_and_opacity', unreal.SlateColor([self.FontColor["r"],self.FontColor["g"],self.FontColor["b"],self.FontColor["a"]]))
         saveAsset(self.Parent.FrameAsset)

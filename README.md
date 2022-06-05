@@ -7,7 +7,7 @@ It is rudimentary at the moment so complex Figma functionality is not maintained
 ## Installation and Usage
 *Install the plugin to your Unreal Project and make sure you have Python scripting enabled.
 *Use pip install requests to install the requests module to your Unreal Python environment {IMPORTANT: Must be your Unreal python envinronment found in "Engine/Binaries/ThirdParty/Python3" folder
-*Edit "Content/Python/runImportFigmaDoc.py" to use your [Personal Access Token](https://www.figma.com/developers/api#access-tokens), [FileID] (https://www.figma.com/developers/api#files-endpoints), and desired import directory.
+*Edit "Content/Python/runImportFigmaDoc.py" to use your [Personal Access Token](https://www.figma.com/developers/api#access-tokens), [FileID](https://www.figma.com/developers/api#files-endpoints), and desired import directory.
 *Run "runImportFigmaDoc.py" from inside Unreal and you should get sub-folders with all of your newly created widgets and asssets
 *Restart Unreal to have all of your referenced widgets update in their parents (seems to be a new-ish bug with Unreal that editing User Widgets isn't reflected in parents until restart)
 
@@ -17,7 +17,6 @@ It is rudimentary at the moment so complex Figma functionality is not maintained
 *Reimporting overrides assets and brings up dialogue boxes for each overrides
 *Doesn't seem to release access to some widgets so deleting/editing widgets immedietly after running can cause issues
 *Requires restart to update widgets in their parents (think this is an Unreal bug)
-*Doesn't use instancing for components (just creates a whole new version for each instance)
 *Doesn't support gradient fills
 *Doesn't support outlines
 *Doesn't support advanced layouts
