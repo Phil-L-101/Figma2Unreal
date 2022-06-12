@@ -293,11 +293,14 @@ class FigmaInstance():
         
     # Produce assets from frame in Unreal and add to parent frame
     def writeToUnreal(self):
-        InstanceSource = self.Document.Components[self.ComponentID]
-        InstanceSourceDirectory = InstanceSource.Directory
-        InstanceSourceAssetName = InstanceSource.AssetName
-        unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,getAssetPath(InstanceSourceDirectory, InstanceSourceAssetName) , createInsatanceName(self.Name, self.id), [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
-        saveAsset(self.Parent.FrameAsset)
+        try: # Try finding source component in document
+            InstanceSource = self.Document.Components[self.ComponentID]
+            InstanceSourceDirectory = InstanceSource.Directory
+            InstanceSourceAssetName = InstanceSource.AssetName
+            unreal.FigmaImporterBPLibrary.add_child_widget(self.Parent.FrameAsset,getAssetPath(InstanceSourceDirectory, InstanceSourceAssetName) , createInsatanceName(self.Name, self.id), [self.Width,self.Height], createRelativePosition([self.Parent.xPosition, self.Parent.yPosition], [self.xPosition, self.yPosition]), self.Alignment, self.MinAnchors, self.MaxAnchors)
+            saveAsset(self.Parent.FrameAsset)
+        except KeyError:
+            print("Unable to find source component")
 
 # A vector is the base class for all shapes and images in Figma
 class FigmaVector():
