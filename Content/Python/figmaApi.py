@@ -99,7 +99,7 @@ def createChildren(ChildrenDict, Document, Parent):
                     Children.append(ChildNode )
                 elif child["type"] == "INSTANCE":
                     ChildNode = FigmaInstance(Document,child, Parent)
-                    ChildNode.writeToUnreal()
+                    Document.ComponentInstances.append(ChildNode)
                     Children.append(ChildNode )
                 elif child["type"] == "VECTOR":
                     ChildNode = FigmaVector(Document,child, Parent)
@@ -145,6 +145,7 @@ class FigmaDocument():
         self.BaseDirectory = BaseDirectory
         self.AccessToken = AccessToken
         self.Components = {}
+        self.ComponentInstances = []
         self.readFile()
 
     # Read in file from API    
@@ -181,6 +182,8 @@ class FigmaDocument():
         unreal.FigmaImporterBPLibrary.clear_content(self.FrameAsset) # Clear any existing content from content tree (does not delete blueprint code but may break references)
         unreal.FigmaImporterBPLibrary.set_background(self.FrameAsset, [10000,10000], [self.BackgroundColor["r"],self.BackgroundColor["g"],self.BackgroundColor["b"],self.BackgroundColor["a"]]) # Canvas Background set to arbitrary size of 10000x10000px
         self.Children = createChildren(self.ChildrenDict, self, self) # Recursively creates child assets
+        for Instance in self.ComponentInstances:
+            Instance.writeToUnreal()
         saveAsset(self.FrameAsset)
 
     # Add a component to the document that can be instanced
