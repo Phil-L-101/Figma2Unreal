@@ -140,12 +140,13 @@ def createChildren(ChildrenDict, Document, Parent):
 
 # Top level parent for a Figma document
 class FigmaDocument():
-    def __init__(self, FileID, BaseDirectory, AccessToken):
+    def __init__(self, FileID, BaseDirectory, AccessToken, Pages = [-1]):
         self.FileID = FileID
         self.BaseDirectory = BaseDirectory
         self.AccessToken = AccessToken
         self.Components = {}
         self.ComponentInstances = []
+        self.Pages= Pages
         self.readFile()
 
     # Read in file from API    
@@ -154,44 +155,56 @@ class FigmaDocument():
         self.File = json.loads(FileResponse.text)
         self.Name = sanitiseName(self.File["name"])
         self.Directory = self.BaseDirectory + self.Name +"/"
-        self.ChildrenDict = self.File["document"]["children"][0]["children"]
-        self.Canvas = self.File["document"]["children"][0]
-        self.xPosition = 0
-        self.yPosition = 0
-        try: # May not have a background colour
-            self.BackgroundColor = {
-                                    "r" : self.Canvas["backgroundColor"]["r"],
-                                    "g" : self.Canvas["backgroundColor"]["g"],
-                                    "b" : self.Canvas["backgroundColor"]["b"],
-                                    "a" : self.Canvas["backgroundColor"]["a"]
-                                    }
-        except KeyError:
-            self.BackgroundColor = {
-                                    "r" : 0.5,
-                                    "g" : 0.5,
-                                    "b" : 0.5,
-                                    "a" : 1
-                                    }
+        self.Canvases = []
+        for i, CanvasContent in enumerate(self.File["document"]["children"]):
+            if i in self.Pages or self.Pages[0] == -1: 
+                self.Canvases.append(FigmaCanvas(CanvasContent, self)) 
+        
+        
 
     # Produce assets from file in Unreal
     def writeToUnreal(self):
         createDirSafe(self.Directory)
-        AssetName = "WBP_" + self.Name
-        self.FrameAsset = createFigmaFrameAsset(self.Directory+"/"+AssetName) # Create new frame asset to use
+        for Canvas in self.Canvases:
+            createDirSafe(Canvas.Directory)
+            AssetName = "WBP_" + Canvas.Name
+            Canvas.FrameAsset = createFigmaFrameAsset(Canvas.Directory+AssetName) # Create new frame asset to use
 
-        unreal.FigmaImporterBPLibrary.clear_content(self.FrameAsset) # Clear any existing content from content tree (does not delete blueprint code but may break references)
-        unreal.FigmaImporterBPLibrary.set_background(self.FrameAsset, [10000,10000], [self.BackgroundColor["r"],self.BackgroundColor["g"],self.BackgroundColor["b"],self.BackgroundColor["a"]]) # Canvas Background set to arbitrary size of 10000x10000px
-        self.Children = createChildren(self.ChildrenDict, self, self) # Recursively creates child assets
-        for Instance in self.ComponentInstances:
-            Instance.writeToUnreal()
-        saveAsset(self.FrameAsset)
+            unreal.FigmaImporterBPLibrary.clear_content(Canvas.FrameAsset) # Clear any existing content from content tree (does not delete blueprint code but may break references)
+            unreal.FigmaImporterBPLibrary.set_background(Canvas.FrameAsset, [10000,10000], [Canvas.BackgroundColor["r"],Canvas.BackgroundColor["g"],Canvas.BackgroundColor["b"],Canvas.BackgroundColor["a"]]) # Canvas Background set to arbitrary size of 10000x10000px
+            Canvas.Children = createChildren(Canvas.ChildrenDict, self, Canvas) # Recursively creates child assets
+            for Instance in self.ComponentInstances:
+                Instance.writeToUnreal()
+            saveAsset(Canvas.FrameAsset)
 
     # Add a component to the document that can be instanced
     def addComponent(self,Component):
         self.Components[Component.id] = Component
 
 
-
+class FigmaCanvas():
+    def __init__(self,CanvasContent, Document):
+        self.Document = Document
+        self.CanvasContent = CanvasContent
+        self.Name = sanitiseName(self.CanvasContent["name"])
+        try: # May not have a background colour
+                    self.BackgroundColor = {
+                                    "r" : self.CanvasContent["backgroundColor"]["r"],
+                                    "g" : self.CanvasContent["backgroundColor"]["g"],
+                                    "b" : self.CanvasContent["backgroundColor"]["b"],
+                                    "a" : self.CanvasContent["backgroundColor"]["a"]
+                                    }
+        except KeyError:
+                    self.BackgroundColor = {
+                                    "r" : 0.5,
+                                    "g" : 0.5,
+                                    "b" : 0.5,
+                                    "a" : 1
+                                    }
+        self.ChildrenDict = self.CanvasContent["children"]
+        self.xPosition = 0
+        self.yPosition = 0
+        self.Directory = self.Document.Directory+self.Name+"/"
 
 # Standard Figma frame holds children
 class FigmaFrame():
@@ -205,7 +218,7 @@ class FigmaFrame():
         self.xPosition = FrameDict["absoluteBoundingBox"]["x"]
         self.yPosition = FrameDict["absoluteBoundingBox"]["y"]
         self.id = FrameDict["id"]
-        if type(self.Parent) == FigmaDocument: # Check if parent is the document canvas and set anchors accordingly
+        if type(self.Parent) == FigmaCanvas: # Check if parent is the canvas and set anchors accordingly
             self.MinAnchors = [0.5,0.5]
             self.MaxAnchors = [0.5,0.5]
             self.Alignment = [0,0]
@@ -272,7 +285,7 @@ class FigmaInstance():
         self.yPosition = FrameDict["absoluteBoundingBox"]["y"]
         self.id = FrameDict["id"]
         self.ComponentID = FrameDict["componentId"]
-        if type(self.Parent) == FigmaDocument: # Check if parent is the document canvas and set anchors accordingly
+        if type(self.Parent) == FigmaCanvas: # Check if parent is the canvas and set anchors accordingly
             self.MinAnchors = [0.5,0.5]
             self.MaxAnchors = [0.5,0.5]
             self.Alignment = [0,0]
